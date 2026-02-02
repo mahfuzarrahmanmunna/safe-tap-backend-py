@@ -25,7 +25,8 @@ from .serializers import (
     CodeVerificationSerializer, PhoneLoginSerializer, LoginSerializer,
     FirebaseTokenSerializer, FirebaseRegistrationSerializer, WorkAssignmentSerializer, WorkAssignmentCreateSerializer,
     WorkCategorySerializer, TechnicianListSerializer, WorkAssignment, AssignmentHistory, AssignmentHistorySerializer,
-    ServiceRequest, ServiceRequestSerializer, ServiceRequestCreateSerializer, ServiceRequestImage, ServiceRequestVideo
+    ServiceRequest, ServiceRequestSerializer, ServiceRequestCreateSerializer, ServiceRequestImage, ServiceRequestVideo,
+    UserListSerializer
 )
 from .services import generate_verification_code, send_sms_verification, verify_phone_number
 from .firebase_auth import verify_firebase_token, get_or_create_user, FirebaseAuthentication
@@ -641,6 +642,19 @@ def verify_email(request):
             'error': f'An error occurred: {str(e)}'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+    #  """
+    # The function `get_current_user` retrieves information about the current authenticated user using
+    # Firebase or Django token authentication.
+    
+    # :param request: The code snippet you provided is a Django REST framework view function that
+    # retrieves information about the current authenticated user. It first attempts to authenticate the
+    # user using a Firebase token, and if that fails or Firebase is not available, it falls back to Django
+    # token authentication
+    # :return: The code snippet is a Django REST framework view function that retrieves information about
+    # the current authenticated user. It first attempts to authenticate the user using a Firebase token,
+    # and if that fails or Firebase is not available, it falls back to Django token authentication.
+    # """ 
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_current_user(request):
@@ -650,30 +664,70 @@ def get_current_user(request):
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
         user = None
         token = None
-        
-        if auth_header.startswith('Bearer '):
+
+        # If no Bearer token is provided, allow session-authenticated users to be used
+        if not auth_header.startswith('Bearer '):
+            if request.user and request.user.is_authenticated:
+                user = request.user
+                print(f"get_current_user: using session-authenticated user: {user.username}")
+            else:
+                return Response({
+                    'error': 'Authentication credentials were not provided.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        else:
             token = auth_header[7:]  # Remove 'Bearer ' prefix
-            
-            # Try to authenticate with Firebase token
-            try:
-                from .firebase_auth import verify_firebase_token
-                decoded_token = verify_firebase_token(token)
-                if decoded_token:
-                    firebase_uid = decoded_token.get('uid')
-                    email = decoded_token.get('email')
-                    
-                    # Get user from Firebase UID or email
-                    try:
-                        user = User.objects.get(email=email)
-                    except User.DoesNotExist:
-                        return Response({
-                            'error': 'User not found'
-                        }, status=status.HTTP_404_NOT_FOUND)
-            except Exception as e:
-                print(f"Firebase authentication error: {str(e)}")
-                # Continue to try Django token authentication
+
+            # If Firebase is not available, prefer session-based auth if present; otherwise 503
+            from .firebase_config import is_firebase_available, verify_firebase_token
+            if not is_firebase_available():
+                if request.user and request.user.is_authenticated:
+                    # Ignore the Bearer token and use the session-authenticated user
+                    user = request.user
+                else:
+                    return Response({
+                        'error': 'Firebase authentication is not available on the server.',
+                        'message': 'Firebase is not configured or credentials are invalid.'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            else:
+                # Try to authenticate with Firebase token
+                try:
+                    decoded_token = verify_firebase_token(token)
+                    print(f"get_current_user: decoded_token present: {bool(decoded_token)}")
+                    if decoded_token:
+                        firebase_uid = decoded_token.get('uid')
+                        email = decoded_token.get('email')
+                        print(f"get_current_user: decoded token keys: {list(decoded_token.keys())}")
+
+                        # Try to find user by firebase_uid first
+                        user = None
+                        try:
+                            if firebase_uid:
+                                profile_obj = UserProfile.objects.filter(firebase_uid=firebase_uid).first()
+                                if profile_obj:
+                                    user = profile_obj.user
+                        except Exception as e:
+                            print(f"Error looking up UserProfile by firebase_uid: {e}")
+
+                        # If not found by uid, try email
+                        if not user:
+                            try:
+                                if email:
+                                    user = User.objects.get(email=email)
+                                    print(f"User found by email: {user.username}")
+                                else:
+                                    user = None
+                            except User.DoesNotExist:
+                                from .firebase_auth import get_or_create_user
+                                user = get_or_create_user(firebase_uid, email, decoded_token.get('name'))
+                                if not user:
+                                    print(f"Failed to create or retrieve user for Firebase UID {firebase_uid} and email {email}")
+                                    return Response({'error': 'Failed to create or retrieve user from Firebase token'}, status=status.HTTP_401_UNAUTHORIZED)
+
+                except Exception as e:
+                    print(f"Firebase authentication error: {str(e)}")
+                    # Continue to try Django token authentication
         
-        # If Firebase authentication failed, try Django token authentication
+        # If Firebase authentication failed or not available, try Django token authentication
         if not user:
             if not token:
                 return Response({
@@ -716,8 +770,13 @@ def get_current_user(request):
             }
         })
     except Exception as e:
+        import traceback
+        traceback.print_exc()
+        # When DEBUG is enabled, include more details for troubleshooting
+        debug_info = str(e) if getattr(settings, 'DEBUG', False) else 'An internal error occurred'
         return Response({
-            'error': f'An error occurred: {str(e)}'
+            'error': 'An error occurred while retrieving current user',
+            'detail': debug_info
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @api_view(['GET'])
@@ -729,28 +788,48 @@ def get_support_info(request):
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
         user = None
         token = None
-        
-        if auth_header.startswith('Bearer '):
+
+        # Allow session-authenticated users when Bearer token is not provided
+        if not auth_header.startswith('Bearer '):
+            if request.user and request.user.is_authenticated:
+                user = request.user
+                print(f"get_support_info: using session-authenticated user: {user.username}")
+            else:
+                return Response({
+                    'error': 'Authentication credentials were not provided.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        else:
             token = auth_header[7:]  # Remove 'Bearer ' prefix
-            
-            # Try to authenticate with Firebase token
-            try:
-                from .firebase_auth import verify_firebase_token
-                decoded_token = verify_firebase_token(token)
-                if decoded_token:
-                    firebase_uid = decoded_token.get('uid')
-                    email = decoded_token.get('email')
-                    
-                    # Get user from Firebase UID or email
-                    try:
-                        user = User.objects.get(email=email)
-                    except User.DoesNotExist:
-                        return Response({
-                            'error': 'User not found'
-                        }, status=status.HTTP_404_NOT_FOUND)
-            except Exception as e:
-                print(f"Firebase authentication error: {str(e)}")
-                # Continue to try Django token authentication
+
+            from .firebase_config import is_firebase_available
+            if not is_firebase_available():
+                if request.user and request.user.is_authenticated:
+                    user = request.user
+                else:
+                    return Response({
+                        'error': 'Firebase authentication is not available on the server.',
+                        'message': 'Firebase is not configured or credentials are invalid.'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            else:
+                # Try to authenticate with Firebase token
+                try:
+                    from .firebase_auth import verify_firebase_token
+                    decoded_token = verify_firebase_token(token)
+                    if decoded_token:
+                        firebase_uid = decoded_token.get('uid')
+                        email = decoded_token.get('email')
+                        
+                        # Get user from Firebase UID or email
+                        try:
+                            user = User.objects.get(email=email)
+                        except User.DoesNotExist:
+                            return Response({
+                                'error': 'User not found'
+                            }, status=status.HTTP_404_NOT_FOUND)
+                except Exception as e:
+                    print(f"Firebase authentication error: {str(e)}")
+                    # Continue to try Django token authentication
         
         # If Firebase authentication failed, try Django token authentication
         if not user:
@@ -873,6 +952,17 @@ def get_all_users(request):
 def get_all_users_firebase(request):
     """Get all users with Firebase authentication"""
     try:
+        # If Firebase not available, return 503
+        try:
+            from .firebase_config import is_firebase_available
+            if not is_firebase_available():
+                return Response({
+                    'error': 'Firebase authentication is not available on the server.',
+                    'message': 'Firebase is not configured or credentials are invalid.'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        except Exception:
+            pass
+
         # Check for Firebase token in Authorization header
         auth_header = request.META.get('HTTP_AUTHORIZATION', '')
         
@@ -922,34 +1012,54 @@ def get_all_users_firebase(request):
         
         # If we reach here, the user is authenticated and is an admin
         users = User.objects.all().order_by('-date_joined')
-        
-        # Ensure all users have profiles and QR codes generated
+
+        # Process users but avoid letting a single user's error cause a 500
+        processed_users = []
+        errors = []
+
         for user_item in users:
             try:
-                profile = user_item.profile
-            except UserProfile.DoesNotExist:
-                # Create profile if it doesn't exist
-                profile = UserProfile.objects.create(user=user_item, role='customer')
-            
-            # Generate support link if it doesn't exist
-            if not profile.support_link:
                 try:
-                    profile.generate_support_link()
-                except Exception as e:
-                    print(f"Error generating support link for user {user_item.id}: {str(e)}")
-            
-            # Generate QR code if it doesn't exist
-            if not profile.qr_code:
-                try:
-                    profile.generate_qr_code()
-                except Exception as e:
-                    print(f"Error generating QR code for user {user_item.id}: {str(e)}")
-        
-        serializer = UserListSerializer(users, many=True)
-        return Response({
-            'count': len(serializer.data),
-            'results': serializer.data
-        })
+                    profile = user_item.profile
+                except UserProfile.DoesNotExist:
+                    profile = UserProfile.objects.create(user=user_item, role='customer')
+
+                # Generate support link if missing (non-blocking)
+                if not profile.support_link:
+                    try:
+                        profile.generate_support_link()
+                    except Exception as e:
+                        print(f"Error generating support link for user {user_item.id}: {str(e)}")
+                        errors.append({'user_id': user_item.id, 'action': 'generate_support_link', 'error': str(e)})
+
+                # Generate QR code if missing (non-blocking)
+                if not profile.qr_code:
+                    try:
+                        profile.generate_qr_code()
+                    except Exception as e:
+                        print(f"Error generating QR code for user {user_item.id}: {str(e)}")
+                        errors.append({'user_id': user_item.id, 'action': 'generate_qr_code', 'error': str(e)})
+
+                processed_users.append(user_item)
+
+            except Exception as e:
+                # Log but continue processing remaining users
+                import traceback
+                traceback.print_exc()
+                errors.append({'user_id': getattr(user_item, 'id', None), 'action': 'processing', 'error': str(e)})
+                continue
+
+        try:
+            serializer = UserListSerializer(processed_users, many=True)
+            response_data = {'count': len(serializer.data), 'results': serializer.data}
+            if errors:
+                response_data['errors'] = errors
+                return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
+            return Response(response_data)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({'error': f'Failed to serialize users: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     except Exception as e:
         return Response({
             'error': f'An error occurred: {str(e)}'
@@ -1694,24 +1804,35 @@ def regenerate_user_qr_code(request, user_id):
         if auth_header.startswith('Bearer '):
             token = auth_header[7:]  # Remove 'Bearer ' prefix
             
-            # Try to authenticate with Firebase token
-            try:
-                from .firebase_auth import verify_firebase_token
-                decoded_token = verify_firebase_token(token)
-                if decoded_token:
-                    firebase_uid = decoded_token.get('uid')
-                    email = decoded_token.get('email')
-                    
-                    # Get user from Firebase UID or email
-                    try:
-                        user = User.objects.get(email=email)
-                    except User.DoesNotExist:
-                        return Response({
-                            'error': 'User not found'
-                        }, status=status.HTTP_404_NOT_FOUND)
-            except Exception as e:
-                print(f"Firebase authentication error: {str(e)}")
-                # Continue to try Django token authentication
+            from .firebase_config import is_firebase_available
+            if not is_firebase_available():
+                if request.user and request.user.is_authenticated:
+                    user = request.user
+                else:
+                    return Response({
+                        'error': 'Firebase authentication is not available on the server.',
+                        'message': 'Firebase is not configured or credentials are invalid.'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            else:
+                # Try to authenticate with Firebase token
+                try:
+                    from .firebase_auth import verify_firebase_token
+                    decoded_token = verify_firebase_token(token)
+                    if decoded_token:
+                        firebase_uid = decoded_token.get('uid')
+                        email = decoded_token.get('email')
+                        
+                        # Get user from Firebase UID or email
+                        try:
+                            user = User.objects.get(email=email)
+                        except User.DoesNotExist:
+                            return Response({
+                                'error': 'User not found'
+                            }, status=status.HTTP_404_NOT_FOUND)
+                except Exception as e:
+                    print(f"Firebase authentication error: {str(e)}")
+                    # Continue to try Django token authentication
         
         # If Firebase authentication failed, try Django token authentication
         if not user:
@@ -1781,24 +1902,35 @@ def update_user_profile(request, user_id):
         if auth_header.startswith('Bearer '):
             token = auth_header[7:]  # Remove 'Bearer ' prefix
             
-            # Try to authenticate with Firebase token
-            try:
-                from .firebase_auth import verify_firebase_token
-                decoded_token = verify_firebase_token(token)
-                if decoded_token:
-                    firebase_uid = decoded_token.get('uid')
-                    email = decoded_token.get('email')
-                    
-                    # Get user from Firebase UID or email
-                    try:
-                        user = User.objects.get(email=email)
-                    except User.DoesNotExist:
-                        return Response({
-                            'error': 'User not found'
-                        }, status=status.HTTP_404_NOT_FOUND)
-            except Exception as e:
-                print(f"Firebase authentication error: {str(e)}")
-                # Continue to try Django token authentication
+            from .firebase_config import is_firebase_available
+            if not is_firebase_available():
+                if request.user and request.user.is_authenticated:
+                    user = request.user
+                else:
+                    return Response({
+                        'error': 'Firebase authentication is not available on the server.',
+                        'message': 'Firebase is not configured or credentials are invalid.'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+            else:
+                # Try to authenticate with Firebase token
+                try:
+                    from .firebase_auth import verify_firebase_token
+                    decoded_token = verify_firebase_token(token)
+                    if decoded_token:
+                        firebase_uid = decoded_token.get('uid')
+                        email = decoded_token.get('email')
+                        
+                        # Get user from Firebase UID or email
+                        try:
+                            user = User.objects.get(email=email)
+                        except User.DoesNotExist:
+                            return Response({
+                                'error': 'User not found'
+                            }, status=status.HTTP_404_NOT_FOUND)
+                except Exception as e:
+                    print(f"Firebase authentication error: {str(e)}")
+                    # Continue to try Django token authentication
         
         # If Firebase authentication failed, try Django token authentication
         if not user:
@@ -2000,6 +2132,28 @@ def technicians_list(request):
     serializer = TechnicianListSerializer(technicians, many=True)
     return Response(serializer.data)
 
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def settings_service_requests(request):
+    """Admin endpoint: return all service requests for the dashboard
+
+    Frontend expects `/api/settings/service-requests/`. This view enforces admin
+    access and returns serialized service requests.
+    """
+    # Ensure authenticated
+    if not (request.user and request.user.is_authenticated):
+        return Response({'error': 'Authentication credentials were not provided.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    # Only admin users should access settings service requests
+    user_role = getattr(getattr(request.user, 'profile', None), 'role', None)
+    if not (user_role == 'admin' or request.user.is_staff):
+        return Response({'error': 'Permission denied. Admin access required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    requests = ServiceRequest.objects.all().order_by('-created_at')
+    serializer = ServiceRequestSerializer(requests, many=True)
+    return Response(serializer.data)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def work_categories(request):
@@ -2078,7 +2232,21 @@ class ServiceRequestViewSet(viewsets.ModelViewSet):
         """
         Get service requests for a specific user
         """
+        # If client sent a Bearer token but Firebase is not available, return 503 (unless a session exists)
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        if auth_header.startswith('Bearer '):
+            from .firebase_config import is_firebase_available
+            if not is_firebase_available():
+                if not (request.user and request.user.is_authenticated):
+                    return Response({
+                        'error': 'Firebase authentication is not available on the server.',
+                        'message': 'Firebase is not configured or credentials are invalid.'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
         # Only allow users to see their own requests or if they are admin
+        if not (request.user and request.user.is_authenticated):
+            return Response({"error": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
         if str(request.user.id) != user_id and not getattr(request.user.profile, 'role', None) == 'admin':
             return Response(
                 {"error": "You don't have permission to view these requests"},
@@ -2086,5 +2254,43 @@ class ServiceRequestViewSet(viewsets.ModelViewSet):
             )
         
         requests = ServiceRequest.objects.filter(user_id=user_id)
-        serializer = self.get_serializer(requests, many=True)
-        return Response(serializer.data)
+        serializer = self.get_serializer(requests, many=True) 
+        return Response(serializer.data) 
+    
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def firebase_status(request):
+    """Check Firebase initialization status and return non-sensitive diagnostic info"""
+    from .firebase_config import is_firebase_available, validate_firebase_credentials
+
+    firebase_available = is_firebase_available()
+    # Provide diagnostic reason without exposing secrets
+    creds = getattr(settings, 'FIREBASE_CREDENTIALS', None)
+    valid, reason = (False, 'No credentials configured')
+    if creds:
+        valid, reason = validate_firebase_credentials(creds)
+
+    # Compose human-readable message and status for backward compatibility
+    if firebase_available:
+        message = 'Firebase is available on the server.'
+        status_text = 'ok'
+    else:
+        if not creds:
+            message = 'Firebase is not available on the server: No credentials configured.'
+            status_text = 'not_configured'
+        elif not valid:
+            message = f"Firebase is not available on the server: {reason}."
+            status_text = 'invalid_credentials'
+        else:
+            message = 'Firebase credentials appear valid but initialization failed. Check service account or permissions.'
+            status_text = 'init_failed'
+
+    return Response({
+        'firebase_available': firebase_available,
+        'credential_valid': valid,
+        'diagnostic': reason if not valid else 'Credentials appear valid (initialization may still fail if service account revoked)',
+        'message': message,
+        'status': status_text,
+        # Backwards-compatible 'error' field for older clients
+        'error': reason if not valid else None,
+    })

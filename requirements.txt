@@ -7,3 +7,4 @@ qrcode==7.4.2
 twilio==8.10.0
 psycopg2-binary>=2.9.11
 python-decouple==3.8
+firebase-admin>=6.0.0

@@ -1,4 +1,5 @@
 from django.urls import path, include
+from django.shortcuts import redirect
 from rest_framework.routers import DefaultRouter
 from .views import (
     CityViewSet,
@@ -7,6 +8,7 @@ from .views import (
     DistrictViewSet,
     ThanaViewSet,
     ProductFeatureViewSet,
+    firebase_status,
     post_list,
     bangladesh_data,
     CustomAuthToken,
@@ -37,6 +39,26 @@ from .views import (
     ServiceRequestViewSet
 )
 
+
+def _normalize_api_prefix(request, subpath=''):
+    """Normalize duplicated API prefixes: /api/api/... -> /api/..."""
+    try:
+        if subpath and subpath.startswith('api/'):
+            rest = subpath[len('api/'):]
+            target = '/api/' + rest
+        else:
+            # If someone requested /api/api (no trailing path) or similar
+            target = '/api/' + (subpath or '')
+
+        # Preserve querystring
+        qs = request.META.get('QUERY_STRING', '')
+        if qs:
+            target = target + '?' + qs
+        return redirect(target, permanent=False)
+    except Exception:
+        # Fallback: do a safe redirect to root API
+        return redirect('/api/', permanent=False)
+
 # Create a router and register your viewsets
 router = DefaultRouter()
 router.register(r'cities', CityViewSet)
@@ -51,10 +73,19 @@ router.register(r'service-requests', ServiceRequestViewSet, basename='service-re
 # Define the URL patterns
 # IMPORTANT: Order matters! More specific paths must come before general ones.
 urlpatterns = [
+    # Normalize duplicated /api/ prefix (e.g., /api/api/divisions/ -> /api/divisions/)
+    # Place this BEFORE other patterns so it runs early and avoids 404s from double prefixes.
+    path('api/<path:subpath>/', _normalize_api_prefix),
+    path('api/', _normalize_api_prefix),
+
     # The root path for your API (e.g., /api/)
     # This MUST come before 'include(router.urls)' to be reached.
     path('', api_root, name='api_root'),
-    
+
+    # Backwards-compatible routes used by frontend
+    path('technicians/', technicians_list, name='technicians_list_public'),
+    path('settings/service-requests/', lambda request: redirect('/api/auth/assignments/'), name='settings_service_requests_redirect'),
+
     # Authentication-related endpoints
     path('auth/token/', CustomAuthToken.as_view(), name='api_token_auth'),
     path('auth/register/', register_user, name='register-user'),
@@ -97,4 +128,8 @@ urlpatterns = [
     path('auth/work-categories/', work_categories, name='work_categories'),
     path('auth/work-categories/create/', create_work_category, name='create_work_category'),
     path('auth/assignment-stats/', assignment_statistics, name='assignment_statistics'),
+    
+    
+    # Firebase status endpoint (reachable at /api/auth/firebase/status/)
+    path('auth/firebase/status/', firebase_status, name='firebase_status'),
 ]

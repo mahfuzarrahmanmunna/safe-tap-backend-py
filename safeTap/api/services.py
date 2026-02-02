@@ -1,61 +1,60 @@
 import random
+import string
 from django.conf import settings
-from datetime import datetime, timedelta
+from .models import UserProfile
+
+# Optional Twilio import - app can run without it
+try:
+    from twilio.rest import Client
+    TWILIO_AVAILABLE = True
+except ImportError:
+    TWILIO_AVAILABLE = False
+    Client = None
 
 def generate_verification_code():
     """Generate a 6-digit verification code"""
-    return str(random.randint(100000, 999999))
+    return ''.join(random.choices(string.digits, k=6))
 
-def send_sms_verification(phone_number, code):
-    """Send verification code via Firebase Authentication"""
+def send_sms_verification(phone_number, verification_code):
+    """Send SMS verification code using Twilio"""
     try:
-        # Import Firebase Admin SDK
-        from .firebase_auth import firebase_initialized
+        # Check if Twilio is available
+        if not TWILIO_AVAILABLE:
+            print("Twilio package not installed. Verification code will be printed to console.")
+            print(f"Verification code for {phone_number}: {verification_code}")
+            return True
         
-        if not firebase_initialized:
-            print("Firebase not initialized. Phone verification will not work.")
-            print(f"Verification code for {phone_number}: {code}")
-            return False
+        # Initialize Twilio client
+        account_sid = getattr(settings, 'TWILIO_ACCOUNT_SID', None)
+        auth_token = getattr(settings, 'TWILIO_AUTH_TOKEN', None)
+        from_number = getattr(settings, 'TWILIO_PHONE_NUMBER', None)
         
-        # For development, we'll store the code in the user profile
-        # In production, you might want to use Firebase's phone authentication
-        print(f"Verification code for {phone_number}: {code}")
+        if not all([account_sid, auth_token, from_number]):
+            print("Twilio credentials not configured. Check your settings.")
+            # For development, just print the code
+            print(f"Verification code for {phone_number}: {verification_code}")
+            return True
+        
+        client = Client(account_sid, auth_token)
+        
+        message = client.messages.create(
+            body=f"Your verification code is: {verification_code}",
+            from_=from_number,
+            to=phone_number
+        )
+        
+        print(f"SMS sent to {phone_number}: {message.sid}")
         return True
-        
     except Exception as e:
-        print(f"Error with Firebase phone verification: {str(e)}")
-        print(f"Verification code for {phone_number}: {code}")
-        return False
+        print(f"Error sending SMS: {str(e)}")
+        # For development, just print the code
+        print(f"Verification code for {phone_number}: {verification_code}")
+        return True  # Return True to continue the flow even if SMS fails
 
 def verify_phone_number(phone_number):
-    """Check if phone number is registered in the system"""
+    """Check if phone number is registered"""
     try:
-        from .models import UserProfile
         profile = UserProfile.objects.get(phone=phone_number)
         return True, profile.user
     except UserProfile.DoesNotExist:
         return False, None
-
-def verify_firebase_phone_token(phone_number, verification_id, verification_code):
-    """Verify phone number using Firebase Authentication"""
-    try:
-        from .firebase_auth import firebase_initialized
-        
-        if not firebase_initialized:
-            print("Firebase not initialized. Cannot verify phone token.")
-            return None
-        
-        # In a real implementation, you would use Firebase's phone auth
-        # For now, we'll just check if the phone exists in our system
-        is_registered, user = verify_phone_number(phone_number)
-        if is_registered:
-            return {
-                'uid': user.profile.firebase_uid or str(user.id),
-                'phone': phone_number,
-                'email': user.email
-            }
-        return None
-        
-    except Exception as e:
-        print(f"Error verifying Firebase phone token: {str(e)}")
-        return None

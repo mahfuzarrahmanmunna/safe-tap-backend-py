@@ -40,11 +40,27 @@ safeTap/
 └── __pycache__/             # Python cache
 ```
 
+## 🧾 Code Summary
+
+- **Main app:** `safeTap/api/` — contains models, views, serializers, admin, permissions, and business logic.
+- **Models:** `api/models.py` — data models (cities, products, geo-hierarchy, user profiles, service requests, work assignments, QR/support link generation).
+- **Serializers:** `api/serializers.py` — request/response shaping and validations.
+- **Views & Auth:** `api/views.py` — viewsets and endpoints (authentication, phone verification, Firebase auth, city bulk import, service requests, work assignments).
+- **Services:** `api/services.py` — SMS/verification helpers and business utilities.
+- **Firebase Integration:** `api/firebase_auth.py`, `api/firebase_config.py`, `api/firebase_init.py` — Firebase token verification and registration helpers.
+- **Background/Management:** `api/management/commands/` — utility commands (e.g., `clean_duplicate_users.py`).
+- **Testing & Admin:** `api/tests.py`, `api/setup_admin.py`, `api/admin.py` — tests and admin helpers.
+- **Settings & Deployment:** `safeTap/settings.py` — environment configuration and third-party integrations (Twilio, Firebase).
+- **Dependencies:** See `requirements.txt` for external libraries (Django, DRF, Twilio, Firebase Admin, qrcode, Pillow).
+
+> This concise summary helps contributors find the right file for tasks and quickly understand responsibilities across the codebase.
+
 ## 📊 Database Models
 
 ### Core Models
 
 **User & Profile**
+
 - `User` - Django's built-in user model
 - `UserProfile` - Extended user data with phone verification and support links
   - Phone number and verification status
@@ -52,11 +68,13 @@ safeTap/
   - QR code generation for support
 
 **Geographic Data**
+
 - `Division` - Bangladesh administrative division (e.g., Dhaka, Chittagong)
 - `District` - District within a division (e.g., Narayanganj within Dhaka)
 - `Thana` - Sub-district level (e.g., Savar within Narayanganj)
 
 **City & Products**
+
 - `City` - City information with slug for routing
 - `CitySlide` - Promotional slides for each city
 - `CityStats` - Statistics about water coverage and ratings
@@ -65,11 +83,13 @@ safeTap/
 - `TechSpec` - Technical specifications and water treatment info
 
 **Content**
+
 - `Post` - Blog posts or news items
 
 ## 🔌 API Endpoints
 
 ### Authentication
+
 - `POST /api/auth/token/` - Get authentication token
 - `POST /api/auth/register/` - Register new user
 - `POST /api/auth/send-code/` - Send SMS verification code
@@ -77,12 +97,14 @@ safeTap/
 - `POST /api/auth/support-info/` - Get user support information
 
 ### Geographic Data
+
 - `GET /api/divisions/` - List all divisions
 - `GET /api/districts/` - List all districts
 - `GET /api/thanas/` - List all thanas
 - `GET /api/bangladesh-data/` - Get complete Bangladesh geographic data
 
 ### Cities & Products
+
 - `GET /api/cities/` - List all cities
 - `POST /api/cities/bulk/` - Bulk create cities with data
 - `GET /api/cities/{slug}/` - Get specific city with slides and products
@@ -90,6 +112,7 @@ safeTap/
 - `GET /api/product-features/` - List product features
 
 ### Content
+
 - `GET /api/posts/` - List all posts
 - `POST /api/posts/` - Create new post (authenticated)
 
@@ -106,21 +129,25 @@ The API uses **Token-Based Authentication** (Django REST Framework tokens):
 ## ⚙️ Key Features
 
 ### Phone Verification System
+
 - Generates 6-digit verification codes
 - Sends codes via Twilio SMS service
 - Tracks verification status per user
 
 ### QR Code Generation
+
 - Automatically generates QR codes for support links
 - Base64 encodes QR images for API responses
 - Displays in Django admin interface
 
 ### Geographic Hierarchies
+
 - Organize data by Division → District → Thana
 - Support location-based queries
 - Enable regional statistics
 
 ### City Data Management
+
 - Store city slides for promotional content
 - Track city statistics (users, ratings, installations)
 - Manage products per city
@@ -128,6 +155,7 @@ The API uses **Token-Based Authentication** (Django REST Framework tokens):
 ## 🔧 Setup & Installation
 
 ### Prerequisites
+
 - Python 3.8+
 - pip
 - Virtual environment (recommended)
@@ -242,6 +270,7 @@ For production deployment:
 ## 📞 Support System
 
 Users receive:
+
 - Unique support link: `https://yourapp.com/support/{unique_id}`
 - QR code containing the support link
 - Displayed in their profile
@@ -249,6 +278,7 @@ Users receive:
 ## 🔍 API Response Examples
 
 ### Register User
+
 ```json
 POST /api/auth/register/
 {
@@ -260,6 +290,7 @@ POST /api/auth/register/
 ```
 
 ### Get City Data
+
 ```json
 GET /api/cities/dhaka/
 {
@@ -279,6 +310,7 @@ This project is part of the SafeTap water initiative.
 ## 🤝 Contributing
 
 Follow Django and DRF best practices:
+
 - Write tests for new features
 - Use meaningful commit messages
 - Keep models normalized
