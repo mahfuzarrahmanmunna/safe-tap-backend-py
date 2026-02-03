@@ -14,7 +14,13 @@ from django.conf import settings
 from django.db import IntegrityError
 from datetime import datetime, timedelta
 
-from .models import Post, City, TechSpec, Division, District, Thana, ProductFeature, UserProfile, WorkAssignment, WorkCategory, AssignmentHistory
+from .models import (
+    Post, City, CitySlide, CityStats, Product, TechSpec, TechSpecification, SmartFeature,
+    TechStage, FAQCategory, FAQ, Review, WhyChoosePoint, HowItWorksStep, PricingPlan,
+    ProductInfo, ComparisonPoint, ProductFeature, UserProfile, WorkAssignment,
+    WorkCategory, AssignmentHistory, ServiceRequest, ServiceRequestImage, ServiceRequestVideo,
+    Division, District, Thana
+)
 from .serializers import (
     CitySerializer, CitySlideSerializer, CityStatsSerializer, 
     ProductSerializer, TechSpecSerializer, PostSerializer,
@@ -26,7 +32,12 @@ from .serializers import (
     FirebaseTokenSerializer, FirebaseRegistrationSerializer, WorkAssignmentSerializer, WorkAssignmentCreateSerializer,
     WorkCategorySerializer, TechnicianListSerializer, WorkAssignment, AssignmentHistory, AssignmentHistorySerializer,
     ServiceRequest, ServiceRequestSerializer, ServiceRequestCreateSerializer, ServiceRequestImage, ServiceRequestVideo,
-    UserListSerializer
+    UserListSerializer,
+     ProductFeatureSerializer,
+    TechSpecificationSerializer, SmartFeatureSerializer, TechStageSerializer,
+    FAQCategorySerializer, FAQSerializer, ReviewSerializer, WhyChoosePointSerializer,
+    HowItWorksStepSerializer, PricingPlanSerializer, ProductInfoSerializer,
+    ComparisonPointSerializer, CityDetailSerializer
 )
 from .services import generate_verification_code, send_sms_verification, verify_phone_number
 from .firebase_auth import verify_firebase_token, get_or_create_user, FirebaseAuthentication
@@ -2294,3 +2305,227 @@ def firebase_status(request):
         # Backwards-compatible 'error' field for older clients
         'error': reason if not valid else None,
     })
+    
+    
+    
+# =====================================================================
+# City Administrations
+# =====================================================================
+class CityViewSet(viewsets.ModelViewSet):
+    queryset = City.objects.all()
+    serializer_class = CitySerializer
+    
+    @action(detail=True, methods=['get'])
+    def details(self, request, pk=None):
+        city = get_object_or_404(City, pk=pk)
+        serializer = CityDetailSerializer(city)
+        return Response(serializer.data)
+
+class CitySlideViewSet(viewsets.ModelViewSet):
+    queryset = CitySlide.objects.all()
+    serializer_class = CitySlideSerializer
+    
+    def get_queryset(self):
+        queryset = CitySlide.objects.all()
+        city_id = self.request.query_params.get('city_id')
+        product_type = self.request.query_params.get('product_type')
+        
+        if city_id:
+            queryset = queryset.filter(city_id=city_id)
+        if product_type:
+            queryset = queryset.filter(product_type=product_type)
+            
+        return queryset
+
+class CityStatsViewSet(viewsets.ModelViewSet):
+    queryset = CityStats.objects.all()
+    serializer_class = CityStatsSerializer
+
+class ProductFeatureViewSet(viewsets.ModelViewSet):
+    queryset = ProductFeature.objects.filter(is_active=True)
+    serializer_class = ProductFeatureSerializer
+
+class TechSpecificationViewSet(viewsets.ModelViewSet):
+    queryset = TechSpecification.objects.filter(is_active=True)
+    serializer_class = TechSpecificationSerializer
+
+class SmartFeatureViewSet(viewsets.ModelViewSet):
+    queryset = SmartFeature.objects.filter(is_active=True)
+    serializer_class = SmartFeatureSerializer
+
+class TechStageViewSet(viewsets.ModelViewSet):
+    queryset = TechStage.objects.filter(is_active=True)
+    serializer_class = TechStageSerializer
+
+class FAQCategoryViewSet(viewsets.ModelViewSet):
+    queryset = FAQCategory.objects.filter(is_active=True)
+    serializer_class = FAQCategorySerializer
+
+class FAQViewSet(viewsets.ModelViewSet):
+    queryset = FAQ.objects.filter(is_active=True)
+    serializer_class = FAQSerializer
+    
+    def get_queryset(self):
+        queryset = FAQ.objects.filter(is_active=True)
+        category_id = self.request.query_params.get('category_id')
+        
+        if category_id:
+            queryset = queryset.filter(category_id=category_id)
+            
+        return queryset
+
+class ReviewViewSet(viewsets.ModelViewSet):
+    queryset = Review.objects.filter(is_active=True)
+    serializer_class = ReviewSerializer
+
+class WhyChoosePointViewSet(viewsets.ModelViewSet):
+    queryset = WhyChoosePoint.objects.filter(is_active=True)
+    serializer_class = WhyChoosePointSerializer
+
+class HowItWorksStepViewSet(viewsets.ModelViewSet):
+    queryset = HowItWorksStep.objects.filter(is_active=True)
+    serializer_class = HowItWorksStepSerializer
+
+class PricingPlanViewSet(viewsets.ModelViewSet):
+    queryset = PricingPlan.objects.filter(is_active=True)
+    serializer_class = PricingPlanSerializer
+    
+    def get_queryset(self):
+        queryset = PricingPlan.objects.filter(is_active=True)
+        product_type = self.request.query_params.get('product_type')
+        
+        if product_type:
+            queryset = queryset.filter(product_type=product_type)
+            
+        return queryset
+    
+    @action(detail=False, methods=['get'])
+    def by_product_type(self, request):
+        product_type = request.query_params.get('product_type')
+        if not product_type:
+            return Response(
+                {"error": "product_type parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        plans = PricingPlan.objects.filter(product_type=product_type, is_active=True)
+        serializer = self.get_serializer(plans, many=True)
+        
+        # Format the response to match the expected structure
+        result = {}
+        for plan in plans:
+            if plan.product_type not in result:
+                result[plan.product_type] = {
+                    "name": plan.product_type,
+                    "plans": {}
+                }
+            
+            result[plan.product_type]["plans"][plan.plan_name] = {
+                "28 days": float(plan.price_28_days),
+                "90 days": float(plan.price_90_days),
+                "360 days": float(plan.price_360_days),
+                "savings": float(plan.savings)
+            }
+        
+        return Response(result)
+
+class ProductInfoViewSet(viewsets.ModelViewSet):
+    queryset = ProductInfo.objects.filter(is_active=True)
+    serializer_class = ProductInfoSerializer
+    
+    def get_queryset(self):
+        queryset = ProductInfo.objects.filter(is_active=True)
+        product_type = self.request.query_params.get('product_type')
+        
+        if product_type:
+            queryset = queryset.filter(product_type=product_type)
+            
+        return queryset
+
+class ComparisonPointViewSet(viewsets.ModelViewSet):
+    queryset = ComparisonPoint.objects.filter(is_active=True)
+    serializer_class = ComparisonPointSerializer
+
+# API endpoint to get all data needed for the city page
+class CityPageDataViewSet(viewsets.ViewSet):
+    """
+    A special ViewSet to get all data needed for the city page in a single request
+    """
+    
+    def list(self, request):
+        city_slug = request.query_params.get('city_slug', 'dhaka')
+        product_type = request.query_params.get('product_type', 'copper')
+        
+        # Get city
+        try:
+            city = City.objects.get(slug=city_slug)
+        except City.DoesNotExist:
+            city = City.objects.get(slug='dhaka')  # Default to Dhaka
+        
+        # Get city details
+        city_serializer = CityDetailSerializer(city)
+        
+        # Get product features
+        product_features = ProductFeature.objects.filter(is_active=True)
+        product_features_serializer = ProductFeatureSerializer(product_features, many=True)
+        
+        # Get tech specs
+        tech_specs = TechSpecification.objects.filter(is_active=True)
+        tech_specs_serializer = TechSpecificationSerializer(tech_specs, many=True)
+        
+        # Get smart features
+        smart_features = SmartFeature.objects.filter(is_active=True)
+        smart_features_serializer = SmartFeatureSerializer(smart_features, many=True)
+        
+        # Get tech stages
+        tech_stages = TechStage.objects.filter(is_active=True)
+        tech_stages_serializer = TechStageSerializer(tech_stages, many=True)
+        
+        # Get FAQs
+        faqs = FAQ.objects.filter(is_active=True)
+        faqs_serializer = FAQSerializer(faqs, many=True)
+        
+        # Get reviews
+        reviews = Review.objects.filter(is_active=True)
+        reviews_serializer = ReviewSerializer(reviews, many=True)
+        
+        # Get why choose points
+        why_choose_points = WhyChoosePoint.objects.filter(is_active=True)
+        why_choose_serializer = WhyChoosePointSerializer(why_choose_points, many=True)
+        
+        # Get how it works steps
+        how_it_works_steps = HowItWorksStep.objects.filter(is_active=True)
+        how_it_works_serializer = HowItWorksStepSerializer(how_it_works_steps, many=True)
+        
+        # Get pricing plans
+        pricing_plans = PricingPlan.objects.filter(product_type=product_type, is_active=True)
+        pricing_plans_serializer = PricingPlanSerializer(pricing_plans, many=True)
+        
+        # Get product info
+        try:
+            product_info = ProductInfo.objects.get(product_type=product_type, is_active=True)
+            product_info_serializer = ProductInfoSerializer(product_info)
+        except ProductInfo.DoesNotExist:
+            product_info_serializer = None
+        
+        # Get comparison points
+        comparison_points = ComparisonPoint.objects.filter(is_active=True)
+        comparison_points_serializer = ComparisonPointSerializer(comparison_points, many=True)
+        
+        # Build response
+        response_data = {
+            'city': city_serializer.data,
+            'product_features': product_features_serializer.data,
+            'tech_specs': tech_specs_serializer.data,
+            'smart_features': smart_features_serializer.data,
+            'tech_stages': tech_stages_serializer.data,
+            'faqs': faqs_serializer.data,
+            'reviews': reviews_serializer.data,
+            'why_choose_points': why_choose_serializer.data,
+            'how_it_works_steps': how_it_works_serializer.data,
+            'pricing_plans': pricing_plans_serializer.data,
+            'product_info': product_info_serializer.data if product_info_serializer else None,
+            'comparison_points': comparison_points_serializer.data,
+        }
+        
+        return Response(response_data)

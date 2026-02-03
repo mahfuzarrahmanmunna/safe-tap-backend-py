@@ -2,12 +2,25 @@ from django.urls import path, include
 from django.shortcuts import redirect
 from rest_framework.routers import DefaultRouter
 from .views import (
+    CityPageDataViewSet,
+    CityStatsViewSet,
     CityViewSet,
+    ComparisonPointViewSet,
+    FAQCategoryViewSet,
+    FAQViewSet,
+    HowItWorksStepViewSet,
+    PricingPlanViewSet,
+    ProductInfoViewSet,
+    ReviewViewSet,
+    SmartFeatureViewSet,
     TechSpecViewSet,
     DivisionViewSet,
     DistrictViewSet,
+    TechSpecificationViewSet,
+    TechStageViewSet,
     ThanaViewSet,
     ProductFeatureViewSet,
+    WhyChoosePointViewSet,
     firebase_status,
     post_list,
     bangladesh_data,
@@ -36,7 +49,8 @@ from .views import (
     assignment_statistics,
     firebase_login,
     firebase_register,
-    ServiceRequestViewSet
+    ServiceRequestViewSet,
+    CitySlideViewSet
 )
 
 
@@ -68,6 +82,19 @@ router.register(r'districts', DistrictViewSet)
 router.register(r'thanas', ThanaViewSet)
 router.register(r'product-features', ProductFeatureViewSet)
 router.register(r'service-requests', ServiceRequestViewSet, basename='service-request')
+router.register(r'city-slides', CitySlideViewSet)
+router.register(r'city-stats', CityStatsViewSet)
+router.register(r'tech-specifications', TechSpecificationViewSet)
+router.register(r'smart-features', SmartFeatureViewSet)
+router.register(r'tech-stages', TechStageViewSet)
+router.register(r'faq-categories', FAQCategoryViewSet)
+router.register(r'faqs', FAQViewSet)
+router.register(r'reviews', ReviewViewSet)
+router.register(r'why-choose-points', WhyChoosePointViewSet)
+router.register(r'how-it-works-steps', HowItWorksStepViewSet)
+router.register(r'pricing-plans', PricingPlanViewSet)
+router.register(r'product-info', ProductInfoViewSet)
+router.register(r'comparison-points', ComparisonPointViewSet)
 
 
 # Define the URL patterns
@@ -132,4 +159,7 @@ urlpatterns = [
     
     # Firebase status endpoint (reachable at /api/auth/firebase/status/)
     path('auth/firebase/status/', firebase_status, name='firebase_status'),
+    
+    
+     path('city-page-data/', CityPageDataViewSet.as_view({'get': 'list'}), name='city-page-data'),
 ]

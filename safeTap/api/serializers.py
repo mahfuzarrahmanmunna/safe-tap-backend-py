@@ -3,7 +3,9 @@ from django.contrib.auth.models import User
 from .models import (
     City, CitySlide, CityStats, Product, TechSpec, Division, District, Thana,
     ProductFeature, UserProfile, Post, WorkAssignment, WorkCategory, AssignmentHistory, ServiceRequest,
-    ServiceRequestImage, ServiceRequestVideo
+    ServiceRequestImage, ServiceRequestVideo, ProductFeature, TechSpecification,
+    SmartFeature, TechStage, FAQCategory, FAQ, Review, WhyChoosePoint,
+    HowItWorksStep, PricingPlan, ProductInfo, ComparisonPoint
 )
 
 class DivisionSerializer(serializers.ModelSerializer):
@@ -283,3 +285,103 @@ class ServiceRequestCreateSerializer(serializers.ModelSerializer):
         
         return service_request
         
+class CitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = City
+        fields = '__all__'
+
+class CitySlideSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CitySlide
+        fields = '__all__'
+
+class CityStatsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CityStats
+        fields = '__all__'
+
+class ProductFeatureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductFeature
+        fields = '__all__'
+
+class TechSpecificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TechSpecification
+        fields = '__all__'
+
+class SmartFeatureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SmartFeature
+        fields = '__all__'
+
+class TechStageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TechStage
+        fields = '__all__'
+
+class FAQCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FAQCategory
+        fields = '__all__'
+
+class FAQSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    
+    class Meta:
+        model = FAQ
+        fields = '__all__'
+
+class ReviewSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Review
+        fields = '__all__'
+
+class WhyChoosePointSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = WhyChoosePoint
+        fields = '__all__'
+
+class HowItWorksStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HowItWorksStep
+        fields = '__all__'
+
+class PricingPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PricingPlan
+        fields = '__all__'
+
+class ProductInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductInfo
+        fields = '__all__'
+
+class ComparisonPointSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComparisonPoint
+        fields = '__all__'
+
+class CityDetailSerializer(serializers.ModelSerializer):
+    slides = serializers.SerializerMethodField()
+    stats = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = City
+        fields = ['id', 'name', 'slug', 'slides', 'stats']
+    
+    def get_slides(self, obj):
+        slides = CitySlide.objects.filter(city=obj, is_active=True)
+        result = {}
+        for slide in slides:
+            if slide.product_type not in result:
+                result[slide.product_type] = []
+            result[slide.product_type].append(CitySlideSerializer(slide).data)
+        return result
+    
+    def get_stats(self, obj):
+        try:
+            stats = CityStats.objects.get(city=obj)
+            return CityStatsSerializer(stats).data
+        except CityStats.DoesNotExist:
+            return None

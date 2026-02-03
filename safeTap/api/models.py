@@ -4,46 +4,42 @@ from io import BytesIO
 import base64
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils.text import slugify
+from django.utils import timezone
+
 
 class Post(models.Model):
     title = models.CharField(max_length=200)
     content = models.TextField()
     author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True)
 
-class City(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=100, unique=True)
+# class City(models.Model):
+#     name = models.CharField(max_length=100, unique=True)
+#     slug = models.SlugField(max_length=100, unique=True)
     
-    def __str__(self):
-        return self.name
+#     def __str__(self):
+#         return self.name
 
-class CitySlide(models.Model):
-    city = models.ForeignKey('City', related_name='slides', on_delete=models.CASCADE)
-    title = models.CharField(max_length=200)
-    subtitle = models.CharField(max_length=200)
-    description = models.TextField()
-    image = models.CharField(max_length=200)  # URL or path to image
-    color = models.CharField(max_length=50)  # CSS gradient classes
+# class CitySlide(models.Model):
+#     city = models.ForeignKey('City', related_name='slides', on_delete=models.CASCADE)
+#     title = models.CharField(max_length=200)
+#     subtitle = models.CharField(max_length=200)
+#     description = models.TextField()
+#     image = models.CharField(max_length=200)  # URL or path to image
+#     color = models.CharField(max_length=50)  # CSS gradient classes
     
-    def __str__(self):
-        return f"{self.city.name} - {self.title}"
+#     def __str__(self):
+#         return f"{self.city.name} - {self.title}"
 
-class CityStats(models.Model):
-    city = models.OneToOneField('City', related_name='stats', on_delete=models.CASCADE)
-    users = models.CharField(max_length=50)
-    rating = models.CharField(max_length=10)
-    installations = models.CharField(max_length=50)
-    
-    def __str__(self):
-        return f"{self.city.name} Stats"
+# Legacy: simplified CityStats removed; full `CityStats` model is defined later in this file.
 
 class Product(models.Model):
     city = models.ForeignKey('City', related_name='products', on_delete=models.CASCADE)
     name = models.CharField(max_length=200)
     price = models.CharField(max_length=50)
-    features = models.JSONField()  # Using JSONField for features array
+    features = models.JSONField(blank=True, default=list)  # Using JSONField for features array
     description = models.TextField()
     
     def __str__(self):
@@ -92,17 +88,7 @@ class Thana(models.Model):
         verbose_name = "Thana"
         verbose_name_plural = "Thanas"
         
-class ProductFeature(models.Model):
-    title = models.CharField(max_length=200)
-    description = models.TextField()
-    image = models.URLField(max_length=500)
-    
-    def __str__(self):
-        return self.title
-    
-    class Meta:
-        verbose_name = 'Product Feature'
-        verbose_name_plural = "Product Features"
+# Legacy: simplified ProductFeature removed; full `ProductFeature` model with ordering/is_active is defined later.
         
 # Authentication related model
 class UserProfile(models.Model):
@@ -347,3 +333,220 @@ class ServiceRequestVideo(models.Model):
     def __str__(self):
         return f"Video for Request #{self.service_request.id}"
 
+
+class City(models.Model):
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True, null=True)
+
+    class Meta:
+        ordering = ['name']
+    
+    def save(self, *args, **kwargs):
+        if not self.slug:
+            self.slug = slugify(self.name)
+        super().save(*args, **kwargs)
+    
+    def __str__(self):
+        return self.name
+
+class CitySlide(models.Model):
+    city = models.ForeignKey(City, on_delete=models.CASCADE, related_name='slides')
+    product_type = models.CharField(max_length=20, choices=[
+        ('copper', 'Copper'),
+        ('ro_plus', 'RO+'),
+        ('alkaline', 'Alkaline'),
+    ], default='copper')
+    title = models.CharField(max_length=200, blank=True, default='')
+    subtitle = models.CharField(max_length=200, blank=True, default='')
+    description = models.TextField(blank=True, default='')
+    image_url = models.URLField(max_length=500, blank=True, default='')
+    color = models.CharField(max_length=50, blank=True, null=True, default='')
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return f"{self.city.name} - {self.product_type} - {self.title}"
+
+class CityStats(models.Model):
+    city = models.OneToOneField(City, on_delete=models.CASCADE, related_name='stats')
+    users = models.CharField(max_length=50)
+    rating = models.CharField(max_length=10)
+    installations = models.CharField(max_length=50)
+    
+    def __str__(self):
+        return f"{self.city.name} Stats"
+
+class ProductFeature(models.Model):
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    image_url = models.URLField(max_length=500, blank=True, default='')
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.title
+
+class TechSpecification(models.Model):
+    icon_name = models.CharField(max_length=50)
+    title = models.CharField(max_length=200)
+    details = models.CharField(max_length=200)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.title
+
+class SmartFeature(models.Model):
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    image_url = models.URLField(max_length=500)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.title
+
+class TechStage(models.Model):
+    title = models.CharField(max_length=200)
+    image_url = models.URLField(max_length=500)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.title
+
+class FAQCategory(models.Model):
+    name = models.CharField(max_length=100)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+        verbose_name_plural = "FAQ Categories"
+    
+    def __str__(self):
+        return self.name
+
+class FAQ(models.Model):
+    category = models.ForeignKey(FAQCategory, on_delete=models.CASCADE, related_name='faqs')
+    question = models.CharField(max_length=500)
+    answer = models.TextField()
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.question
+
+class Review(models.Model):
+    name = models.CharField(max_length=100)
+    rating = models.PositiveIntegerField(default=5)  # 1-5
+    comment = models.TextField()
+    avatar_url = models.URLField(max_length=500, blank=True)
+    city = models.CharField(max_length=100, blank=True)
+    is_verified = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.name} - {self.rating}/5"
+
+class WhyChoosePoint(models.Model):
+    label = models.CharField(max_length=100)
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    image_url = models.URLField(max_length=500)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.title
+
+class HowItWorksStep(models.Model):
+    title = models.CharField(max_length=200)
+    icon_class = models.CharField(max_length=100)  # Font Awesome class name
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.title
+
+class PricingPlan(models.Model):
+    product_type = models.CharField(max_length=20, choices=[
+        ('copper', 'Copper'),
+        ('ro_plus', 'RO+'),
+        ('alkaline', 'Alkaline'),
+    ])
+    plan_name = models.CharField(max_length=100)  # e.g., "Couple", "Family", "Unlimited"
+    plan_details = models.CharField(max_length=100)  # e.g., "200 ltrs/m"
+    price_28_days = models.DecimalField(max_digits=10, decimal_places=2)
+    price_90_days = models.DecimalField(max_digits=10, decimal_places=2)
+    price_360_days = models.DecimalField(max_digits=10, decimal_places=2)
+    savings = models.DecimalField(max_digits=10, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = ['product_type', 'plan_name']
+    
+    def __str__(self):
+        return f"{self.product_type} - {self.plan_name}"
+
+class ProductInfo(models.Model):
+    product_type = models.CharField(max_length=20, choices=[
+        ('copper', 'Copper'),
+        ('ro_plus', 'RO+'),
+        ('alkaline', 'Alkaline'),
+    ])
+    name = models.CharField(max_length=200)
+    subtitle = models.CharField(max_length=200)
+    description = models.TextField()
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        unique_together = ['product_type']
+    
+    def __str__(self):
+        return f"{self.product_type} - {self.name}"
+
+class ComparisonPoint(models.Model):
+    category = models.CharField(max_length=100)
+    water_can_description = models.TextField()
+    other_purifier_description = models.TextField()
+    safetap_description = models.TextField()
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    
+    class Meta:
+        ordering = ['order']
+    
+    def __str__(self):
+        return self.category
