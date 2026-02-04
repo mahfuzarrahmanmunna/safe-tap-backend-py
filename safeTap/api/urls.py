@@ -1,6 +1,7 @@
 from django.urls import path, include
 from django.shortcuts import redirect
 from rest_framework.routers import DefaultRouter
+from . import views  # Import from the local views module, not django.views
 from .views import (
     CityPageDataViewSet,
     CityStatsViewSet,
@@ -50,7 +51,8 @@ from .views import (
     firebase_login,
     firebase_register,
     ServiceRequestViewSet,
-    CitySlideViewSet
+    CitySlideViewSet,
+    upload_image,  # Import the upload_image function
 )
 
 
@@ -161,5 +163,8 @@ urlpatterns = [
     path('auth/firebase/status/', firebase_status, name='firebase_status'),
     
     
-     path('city-page-data/', CityPageDataViewSet.as_view({'get': 'list'}), name='city-page-data'),
+    path('city-page-data/', CityPageDataViewSet.as_view({'get': 'list'}), name='city-page-data'),
+     
+     
+    path('upload-image/', upload_image, name='upload_image'),
 ]

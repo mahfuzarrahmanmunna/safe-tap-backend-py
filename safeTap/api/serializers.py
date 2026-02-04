@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from .models import (
     City, CitySlide, CityStats, Product, TechSpec, Division, District, Thana,
     ProductFeature, UserProfile, Post, WorkAssignment, WorkCategory, AssignmentHistory, ServiceRequest,
-    ServiceRequestImage, ServiceRequestVideo, ProductFeature, TechSpecification,
+    ServiceRequestImage, ServiceRequestVideo, TechSpecification,
     SmartFeature, TechStage, FAQCategory, FAQ, Review, WhyChoosePoint,
     HowItWorksStep, PricingPlan, ProductInfo, ComparisonPoint
 )
@@ -33,10 +33,25 @@ class BangladeshDataSerializer(serializers.Serializer):
     district = serializers.CharField()
     thanas = serializers.ListField(child=serializers.CharField())
 
+class CitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = City
+        fields = '__all__'
+
 class CitySlideSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = CitySlide
         fields = '__all__'
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
 
 class CityStatsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -48,14 +63,29 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = '__all__'
 
-class CitySerializer(serializers.ModelSerializer):
-    slides = CitySlideSerializer(many=True, read_only=True)
-    stats = CityStatsSerializer(read_only=True)
-    products = ProductSerializer(many=True, read_only=True)
+class CityDetailSerializer(serializers.ModelSerializer):
+    slides = serializers.SerializerMethodField()
+    stats = serializers.SerializerMethodField()
     
     class Meta:
         model = City
-        fields = '__all__'
+        fields = ['id', 'name', 'slug', 'slides', 'stats']
+    
+    def get_slides(self, obj):
+        slides = CitySlide.objects.filter(city=obj, is_active=True)
+        result = {}
+        for slide in slides:
+            if slide.product_type not in result:
+                result[slide.product_type] = []
+            result[slide.product_type].append(CitySlideSerializer(slide, context=self.context).data)
+        return result
+    
+    def get_stats(self, obj):
+        try:
+            stats = CityStats.objects.get(city=obj)
+            return CityStatsSerializer(stats).data
+        except CityStats.DoesNotExist:
+            return None
 
 class TechSpecSerializer(serializers.ModelSerializer):
     class Meta:
@@ -63,8 +93,115 @@ class TechSpecSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ProductFeatureSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
     class Meta:
         model = ProductFeature
+        fields = '__all__'
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
+
+class TechSpecificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TechSpecification
+        fields = '__all__'
+
+class SmartFeatureSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = SmartFeature
+        fields = '__all__'
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
+
+class TechStageSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TechStage
+        fields = '__all__'
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
+
+class FAQCategorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FAQCategory
+        fields = '__all__'
+
+class FAQSerializer(serializers.ModelSerializer):
+    category_name = serializers.CharField(source='category.name', read_only=True)
+    
+    class Meta:
+        model = FAQ
+        fields = '__all__'
+
+class ReviewSerializer(serializers.ModelSerializer):
+    avatar_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Review
+        fields = '__all__'
+    
+    def get_avatar_url(self, obj):
+        if obj.avatar:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.avatar.url)
+            return obj.avatar.url
+        return None
+
+class WhyChoosePointSerializer(serializers.ModelSerializer):
+    image_url = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = WhyChoosePoint
+        fields = '__all__'
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
+
+class HowItWorksStepSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HowItWorksStep
+        fields = '__all__'
+
+class PricingPlanSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PricingPlan
+        fields = '__all__'
+
+class ProductInfoSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductInfo
+        fields = '__all__'
+
+class ComparisonPointSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ComparisonPoint
         fields = '__all__'
 
 class UserRegistrationSerializer(serializers.Serializer):
@@ -203,19 +340,37 @@ class WorkAssignmentCreateSerializer(serializers.ModelSerializer):
 
 class ServiceRequestImageSerializer(serializers.ModelSerializer):
     image = serializers.ImageField(required=True)
+    image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = ServiceRequestImage
-        fields = ['id', 'image', 'uploaded_at']
+        fields = ['id', 'image', 'image_url', 'uploaded_at']
         read_only_fields = ['id', 'uploaded_at']
+    
+    def get_image_url(self, obj):
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
 
 class ServiceRequestVideoSerializer(serializers.ModelSerializer):
     video = serializers.FileField(required=True)
+    video_url = serializers.SerializerMethodField()
     
     class Meta:
         model = ServiceRequestVideo
-        fields = ['id', 'video', 'uploaded_at']
+        fields = ['id', 'video', 'video_url', 'uploaded_at']
         read_only_fields = ['id', 'uploaded_at']
+    
+    def get_video_url(self, obj):
+        if obj.video:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.video.url)
+            return obj.video.url
+        return None
 
 class TechnicianSerializer(serializers.ModelSerializer):
     name = serializers.SerializerMethodField()
@@ -284,104 +439,3 @@ class ServiceRequestCreateSerializer(serializers.ModelSerializer):
             )
         
         return service_request
-        
-class CitySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = City
-        fields = '__all__'
-
-class CitySlideSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CitySlide
-        fields = '__all__'
-
-class CityStatsSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CityStats
-        fields = '__all__'
-
-class ProductFeatureSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ProductFeature
-        fields = '__all__'
-
-class TechSpecificationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TechSpecification
-        fields = '__all__'
-
-class SmartFeatureSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = SmartFeature
-        fields = '__all__'
-
-class TechStageSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = TechStage
-        fields = '__all__'
-
-class FAQCategorySerializer(serializers.ModelSerializer):
-    class Meta:
-        model = FAQCategory
-        fields = '__all__'
-
-class FAQSerializer(serializers.ModelSerializer):
-    category_name = serializers.CharField(source='category.name', read_only=True)
-    
-    class Meta:
-        model = FAQ
-        fields = '__all__'
-
-class ReviewSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Review
-        fields = '__all__'
-
-class WhyChoosePointSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = WhyChoosePoint
-        fields = '__all__'
-
-class HowItWorksStepSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = HowItWorksStep
-        fields = '__all__'
-
-class PricingPlanSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PricingPlan
-        fields = '__all__'
-
-class ProductInfoSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ProductInfo
-        fields = '__all__'
-
-class ComparisonPointSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ComparisonPoint
-        fields = '__all__'
-
-class CityDetailSerializer(serializers.ModelSerializer):
-    slides = serializers.SerializerMethodField()
-    stats = serializers.SerializerMethodField()
-    
-    class Meta:
-        model = City
-        fields = ['id', 'name', 'slug', 'slides', 'stats']
-    
-    def get_slides(self, obj):
-        slides = CitySlide.objects.filter(city=obj, is_active=True)
-        result = {}
-        for slide in slides:
-            if slide.product_type not in result:
-                result[slide.product_type] = []
-            result[slide.product_type].append(CitySlideSerializer(slide).data)
-        return result
-    
-    def get_stats(self, obj):
-        try:
-            stats = CityStats.objects.get(city=obj)
-            return CityStatsSerializer(stats).data
-        except CityStats.DoesNotExist:
-            return None

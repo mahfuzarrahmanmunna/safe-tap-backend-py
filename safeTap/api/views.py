@@ -1,3 +1,4 @@
+import os
 from django.http import HttpResponse
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import api_view, action, permission_classes
@@ -2529,3 +2530,45 @@ class CityPageDataViewSet(viewsets.ViewSet):
         }
         
         return Response(response_data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def upload_image(request):
+    """
+    Upload an image and return its URL
+    """
+    if 'image' not in request.FILES:
+        return Response(
+            {'error': 'No image file provided'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    image_file = request.FILES['image']
+    
+    # Validate file type
+    if not image_file.content_type.startswith('image/'):
+        return Response(
+            {'error': 'File is not an image'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Generate unique filename
+    file_extension = os.path.splitext(image_file.name)[1]
+    unique_filename = f"{uuid.uuid4()}{file_extension}"
+    
+    # Create upload directory if it doesn't exist
+    upload_dir = os.path.join(settings.MEDIA_ROOT, 'uploads')
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Save the file
+    file_path = os.path.join(upload_dir, unique_filename)
+    with open(file_path, 'wb+') as destination:
+        for chunk in image_file.chunks():
+            destination.write(chunk)
+    
+    # Return the URL
+    image_url = f"{settings.MEDIA_URL}uploads/{unique_filename}"
+    
+    return Response({'image_url': image_url}, status=status.HTTP_201_CREATED)
+

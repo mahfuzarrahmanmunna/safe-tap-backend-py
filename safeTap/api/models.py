@@ -15,81 +15,10 @@ class Post(models.Model):
     created_at = models.DateTimeField(auto_now_add=True, null=True)
     updated_at = models.DateTimeField(auto_now=True, null=True)
 
-# class City(models.Model):
-#     name = models.CharField(max_length=100, unique=True)
-#     slug = models.SlugField(max_length=100, unique=True)
-    
-#     def __str__(self):
-#         return self.name
-
-# class CitySlide(models.Model):
-#     city = models.ForeignKey('City', related_name='slides', on_delete=models.CASCADE)
-#     title = models.CharField(max_length=200)
-#     subtitle = models.CharField(max_length=200)
-#     description = models.TextField()
-#     image = models.CharField(max_length=200)  # URL or path to image
-#     color = models.CharField(max_length=50)  # CSS gradient classes
-    
-#     def __str__(self):
-#         return f"{self.city.name} - {self.title}"
-
-# Legacy: simplified CityStats removed; full `CityStats` model is defined later in this file.
-
-class Product(models.Model):
-    city = models.ForeignKey('City', related_name='products', on_delete=models.CASCADE)
-    name = models.CharField(max_length=200)
-    price = models.CharField(max_length=50)
-    features = models.JSONField(blank=True, default=list)  # Using JSONField for features array
-    description = models.TextField()
-    
-    def __str__(self):
-        return f"{self.city.name} - {self.name}"
-
-class TechSpec(models.Model):
-    icon_name = models.CharField(max_length=50)  # Store icon name like "Shield", "Zap"
-    title = models.CharField(max_length=200)
-    details = models.CharField(max_length=200)
-    
     def __str__(self):
         return self.title
 
-# New models for Bangladesh geographical data
-class Division(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    
-    def __str__(self):
-        return self.name
-    
-    class Meta:
-        verbose_name = "Division"
-        verbose_name_plural = "Divisions"
 
-class District(models.Model):
-    name = models.CharField(max_length=100)
-    division = models.ForeignKey(Division, on_delete=models.CASCADE, related_name='districts')
-    
-    def __str__(self):
-        return f"{self.name}, {self.division.name}"
-    
-    class Meta:
-        unique_together = ('name', 'division')
-        verbose_name = "District"
-        verbose_name_plural = "Districts"
-
-class Thana(models.Model):
-    name = models.CharField(max_length=100)
-    district = models.ForeignKey(District, on_delete=models.CASCADE, related_name='thanas')
-    
-    def __str__(self):
-        return f"{self.name}, {self.district.name}"
-    
-    class Meta:
-        unique_together = ('name', 'district')
-        verbose_name = "Thana"
-        verbose_name_plural = "Thanas"
-        
-# Legacy: simplified ProductFeature removed; full `ProductFeature` model with ordering/is_active is defined later.
-        
 # Authentication related model
 class UserProfile(models.Model):
     ROLE_CHOICES = (
@@ -162,6 +91,7 @@ class UserProfile(models.Model):
             traceback.print_exc()
             return ""
 
+
 # Add a signal to create UserProfile when a User is created
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -178,7 +108,6 @@ def create_user_profile(sender, instance, created, **kwargs):
             profile.generate_qr_code()
             print(f"Profile with QR code created for user: {instance.username}")
 
-# Add these models to your existing models.py
 
 # Add this Customer model that was missing
 class Customer(models.Model):
@@ -193,11 +122,11 @@ class Customer(models.Model):
         verbose_name = "Customer"
         verbose_name_plural = "Customers"
 
+
 class WorkCategory(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
     icon = models.CharField(max_length=50, blank=True)  # Icon name
-    # Uncomment this line to add the created_at field
     created_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
@@ -206,6 +135,7 @@ class WorkCategory(models.Model):
     class Meta:
         verbose_name = "Work Category"
         verbose_name_plural = "Work Categories"
+
 
 class WorkAssignment(models.Model):
     STATUS_CHOICES = (
@@ -252,7 +182,6 @@ class WorkAssignment(models.Model):
     actual_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     
     # Timestamps
-    # Uncomment this line to add the created_at field
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
@@ -267,7 +196,8 @@ class WorkAssignment(models.Model):
     class Meta:
         verbose_name = "Work Assignment"
         verbose_name_plural = "Work Assignments"
-        ordering = ['-created_at']  # This will now work since created_at is defined
+        ordering = ['-created_at']
+
 
 class AssignmentHistory(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
@@ -317,6 +247,7 @@ class ServiceRequest(models.Model):
     def __str__(self):
         return f"Service Request #{self.id} - {self.user.username}"
 
+
 class ServiceRequestImage(models.Model):
     service_request = models.ForeignKey(ServiceRequest, on_delete=models.CASCADE, related_name='images')
     image = models.ImageField(upload_to='service_requests/images/')
@@ -325,6 +256,7 @@ class ServiceRequestImage(models.Model):
     def __str__(self):
         return f"Image for Request #{self.service_request.id}"
 
+
 class ServiceRequestVideo(models.Model):
     service_request = models.ForeignKey(ServiceRequest, on_delete=models.CASCADE, related_name='videos')
     video = models.FileField(upload_to='service_requests/videos/')
@@ -332,6 +264,44 @@ class ServiceRequestVideo(models.Model):
     
     def __str__(self):
         return f"Video for Request #{self.service_request.id}"
+
+
+# New models for Bangladesh geographical data
+class Division(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    
+    def __str__(self):
+        return self.name
+    
+    class Meta:
+        verbose_name = "Division"
+        verbose_name_plural = "Divisions"
+
+
+class District(models.Model):
+    name = models.CharField(max_length=100)
+    division = models.ForeignKey(Division, on_delete=models.CASCADE, related_name='districts')
+    
+    def __str__(self):
+        return f"{self.name}, {self.division.name}"
+    
+    class Meta:
+        unique_together = ('name', 'division')
+        verbose_name = "District"
+        verbose_name_plural = "Districts"
+
+
+class Thana(models.Model):
+    name = models.CharField(max_length=100)
+    district = models.ForeignKey(District, on_delete=models.CASCADE, related_name='thanas')
+    
+    def __str__(self):
+        return f"{self.name}, {self.district.name}"
+    
+    class Meta:
+        unique_together = ('name', 'district')
+        verbose_name = "Thana"
+        verbose_name_plural = "Thanas"
 
 
 class City(models.Model):
@@ -352,6 +322,7 @@ class City(models.Model):
     def __str__(self):
         return self.name
 
+
 class CitySlide(models.Model):
     city = models.ForeignKey(City, on_delete=models.CASCADE, related_name='slides')
     product_type = models.CharField(max_length=20, choices=[
@@ -362,7 +333,7 @@ class CitySlide(models.Model):
     title = models.CharField(max_length=200, blank=True, default='')
     subtitle = models.CharField(max_length=200, blank=True, default='')
     description = models.TextField(blank=True, default='')
-    image_url = models.URLField(max_length=500, blank=True, default='')
+    image = models.ImageField(upload_to='city_slides/', blank=True, null=True)
     color = models.CharField(max_length=50, blank=True, null=True, default='')
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
@@ -373,6 +344,7 @@ class CitySlide(models.Model):
     def __str__(self):
         return f"{self.city.name} - {self.product_type} - {self.title}"
 
+
 class CityStats(models.Model):
     city = models.OneToOneField(City, on_delete=models.CASCADE, related_name='stats')
     users = models.CharField(max_length=50)
@@ -382,10 +354,22 @@ class CityStats(models.Model):
     def __str__(self):
         return f"{self.city.name} Stats"
 
+
+class Product(models.Model):
+    city = models.ForeignKey('City', related_name='products', on_delete=models.CASCADE)
+    name = models.CharField(max_length=200)
+    price = models.CharField(max_length=50)
+    features = models.JSONField(blank=True, default=list)  # Using JSONField for features array
+    description = models.TextField()
+    
+    def __str__(self):
+        return f"{self.city.name} - {self.name}"
+
+
 class ProductFeature(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
-    image_url = models.URLField(max_length=500, blank=True, default='')
+    image = models.ImageField(upload_to='product_features/', blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     
@@ -394,6 +378,16 @@ class ProductFeature(models.Model):
     
     def __str__(self):
         return self.title
+
+
+class TechSpec(models.Model):
+    icon_name = models.CharField(max_length=50)  # Store icon name like "Shield", "Zap"
+    title = models.CharField(max_length=200)
+    details = models.CharField(max_length=200)
+    
+    def __str__(self):
+        return self.title
+
 
 class TechSpecification(models.Model):
     icon_name = models.CharField(max_length=50)
@@ -408,10 +402,11 @@ class TechSpecification(models.Model):
     def __str__(self):
         return self.title
 
+
 class SmartFeature(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
-    image_url = models.URLField(max_length=500)
+    image = models.ImageField(upload_to='smart_features/', blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     
@@ -421,9 +416,10 @@ class SmartFeature(models.Model):
     def __str__(self):
         return self.title
 
+
 class TechStage(models.Model):
     title = models.CharField(max_length=200)
-    image_url = models.URLField(max_length=500)
+    image = models.ImageField(upload_to='tech_stages/', blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     
@@ -432,6 +428,7 @@ class TechStage(models.Model):
     
     def __str__(self):
         return self.title
+
 
 class FAQCategory(models.Model):
     name = models.CharField(max_length=100)
@@ -444,6 +441,7 @@ class FAQCategory(models.Model):
     
     def __str__(self):
         return self.name
+
 
 class FAQ(models.Model):
     category = models.ForeignKey(FAQCategory, on_delete=models.CASCADE, related_name='faqs')
@@ -458,11 +456,12 @@ class FAQ(models.Model):
     def __str__(self):
         return self.question
 
+
 class Review(models.Model):
     name = models.CharField(max_length=100)
     rating = models.PositiveIntegerField(default=5)  # 1-5
     comment = models.TextField()
-    avatar_url = models.URLField(max_length=500, blank=True)
+    avatar = models.ImageField(upload_to='review_avatars/', blank=True, null=True)
     city = models.CharField(max_length=100, blank=True)
     is_verified = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
@@ -474,11 +473,12 @@ class Review(models.Model):
     def __str__(self):
         return f"{self.name} - {self.rating}/5"
 
+
 class WhyChoosePoint(models.Model):
     label = models.CharField(max_length=100)
     title = models.CharField(max_length=200)
     description = models.TextField()
-    image_url = models.URLField(max_length=500)
+    image = models.ImageField(upload_to='why_choose_points/', blank=True, null=True)
     order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
     
@@ -487,6 +487,7 @@ class WhyChoosePoint(models.Model):
     
     def __str__(self):
         return self.title
+
 
 class HowItWorksStep(models.Model):
     title = models.CharField(max_length=200)
@@ -499,6 +500,7 @@ class HowItWorksStep(models.Model):
     
     def __str__(self):
         return self.title
+
 
 class PricingPlan(models.Model):
     product_type = models.CharField(max_length=20, choices=[
@@ -520,6 +522,7 @@ class PricingPlan(models.Model):
     def __str__(self):
         return f"{self.product_type} - {self.plan_name}"
 
+
 class ProductInfo(models.Model):
     product_type = models.CharField(max_length=20, choices=[
         ('copper', 'Copper'),
@@ -536,6 +539,7 @@ class ProductInfo(models.Model):
     
     def __str__(self):
         return f"{self.product_type} - {self.name}"
+
 
 class ComparisonPoint(models.Model):
     category = models.CharField(max_length=100)
