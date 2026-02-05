@@ -2572,3 +2572,128 @@ def upload_image(request):
     
     return Response({'image_url': image_url}, status=status.HTTP_201_CREATED)
 
+
+#  Add this to your views.py file in the Django backend
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def save_referral_code(request):
+    """Save or update user's referral code and link"""
+    try:
+        user = request.user
+        data = request.data
+        
+        referral_code = data.get('referralCode')
+        referral_link = data.get('referralLink')
+        
+        if not referral_code or not referral_link:
+            return Response({
+                'error': 'Referral code and link are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            profile = user.profile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(user=user, role='customer')
+        
+        # Update profile with referral code and link
+        profile.referral_code = referral_code
+        profile.referral_link = referral_link
+        profile.save()
+        
+        return Response({
+            'message': 'Referral code saved successfully',
+            'referral_code': referral_code,
+            'referral_link': referral_link
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_referral_info(request):
+    """Get user's referral code and link"""
+    try:
+        user = request.user
+        
+        try:
+            profile = user.profile
+        except UserProfile.DoesNotExist:
+            return Response({
+                'error': 'User profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Generate referral code and link if they don't exist
+        if not profile.referral_code:
+            userId = user.id
+            firstName = user.first_name or ''
+            lastName = user.last_name or ''
+            
+            # Create a personalized referral code
+            nameInitials = (firstName[0] + (lastName[0] if lastName else '')).upper() if firstName else ''
+            userIdPart = str(userId)[-4:]
+            referral_code = f"ST{nameInitials}{userIdPart}"
+            
+            # Generate referral link
+            referral_link = f"https://safetap.com/signup?ref={referral_code}"
+            
+            # Save to profile
+            profile.referral_code = referral_code
+            profile.referral_link = referral_link
+            profile.save()
+        else:
+            referral_code = profile.referral_code
+            referral_link = profile.referral_link
+        
+        return Response({
+            'referral_code': referral_code,
+            'referral_link': referral_link
+        })
+        
+    except Exception as e:
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def validate_referral_code(request):
+    """Validate a referral code during signup"""
+    try:
+        data = request.data
+        referral_code = data.get('referralCode')
+        
+        if not referral_code:
+            return Response({
+                'error': 'Referral code is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            profile = UserProfile.objects.get(referral_code=referral_code)
+            referrer = profile.user
+            
+            return Response({
+                'valid': True,
+                'referrer': {
+                    'id': referrer.id,
+                    'username': referrer.username,
+                    'first_name': referrer.first_name,
+                    'last_name': referrer.last_name
+                }
+            })
+            
+        except UserProfile.DoesNotExist:
+            return Response({
+                'valid': False,
+                'error': 'Invalid referral code'
+            }, status=status.HTTP_404_NOT_FOUND)
+            
+    except Exception as e:
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+

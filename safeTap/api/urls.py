@@ -23,11 +23,14 @@ from .views import (
     ProductFeatureViewSet,
     WhyChoosePointViewSet,
     firebase_status,
+    get_referral_info,
     post_list,
     bangladesh_data,
     CustomAuthToken,
     register_user,
+    save_referral_code,
     send_verification_email,
+    validate_referral_code,
     verify_email,
     get_current_user,
     get_support_info,
@@ -52,7 +55,7 @@ from .views import (
     firebase_register,
     ServiceRequestViewSet,
     CitySlideViewSet,
-    upload_image,  # Import the upload_image function
+    upload_image,
 )
 
 
@@ -126,6 +129,11 @@ urlpatterns = [
     path('auth/users/', get_all_users, name='get_all_users'),  # Get all users with Django auth
     path('auth/users/firebase/', get_all_users_firebase, name='get_all_users_firebase'),  # Get all users with Firebase auth
     
+    # Referral code endpoints
+    path('auth/referral-code/', save_referral_code, name='save_referral_code'),
+    path('auth/referral-info/', get_referral_info, name='get_referral_info'),
+    path('auth/validate-referral/', validate_referral_code, name='validate_referral_code'),
+
     # Phone verification endpoints
     path('auth/phone/send-code/', send_phone_verification_code, name='send_phone_verification_code'),
     path('auth/phone/verify/', verify_phone_code, name='verify_phone_code'),
@@ -167,4 +175,5 @@ urlpatterns = [
      
      
     path('upload-image/', upload_image, name='upload_image'),
+    
 ]
