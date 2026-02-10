@@ -2697,3 +2697,321 @@ def validate_referral_code(request):
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # We'll handle authentication manually
+def update_profile(request):
+    """Update user profile information"""
+    try:
+        # Check for Firebase token in Authorization header
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        user = None
+        token = None
+
+        # If no Bearer token is provided, allow session-authenticated users to be used
+        if not auth_header.startswith('Bearer '):
+            if request.user and request.user.is_authenticated:
+                user = request.user
+                print(f"update_profile: using session-authenticated user: {user.username}")
+            else:
+                return Response({
+                    'error': 'Authentication credentials were not provided.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        else:
+            token = auth_header[7:]  # Remove 'Bearer ' prefix
+
+            # If Firebase is not available, prefer session-based auth if present; otherwise 503
+            from .firebase_config import is_firebase_available, verify_firebase_token
+            if not is_firebase_available():
+                if request.user and request.user.is_authenticated:
+                    # Ignore the Bearer token and use the session-authenticated user
+                    user = request.user
+                else:
+                    return Response({
+                        'error': 'Firebase authentication is not available on the server.',
+                        'message': 'Firebase is not configured or credentials are invalid.'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            else:
+                # Try to authenticate with Firebase token
+                try:
+                    decoded_token = verify_firebase_token(token)
+                    print(f"update_profile: decoded_token present: {bool(decoded_token)}")
+                    if decoded_token:
+                        firebase_uid = decoded_token.get('uid')
+                        email = decoded_token.get('email')
+                        print(f"update_profile: decoded token keys: {list(decoded_token.keys())}")
+
+                        # Try to find user by firebase_uid first
+                        user = None
+                        try:
+                            if firebase_uid:
+                                profile_obj = UserProfile.objects.filter(firebase_uid=firebase_uid).first()
+                                if profile_obj:
+                                    user = profile_obj.user
+                        except Exception as e:
+                            print(f"Error looking up UserProfile by firebase_uid: {e}")
+
+                        # If not found by uid, try email
+                        if not user:
+                            try:
+                                if email:
+                                    user = User.objects.get(email=email)
+                                    print(f"User found by email: {user.username}")
+                                else:
+                                    user = None
+                            except User.DoesNotExist:
+                                from .firebase_auth import get_or_create_user
+                                user = get_or_create_user(firebase_uid, email, decoded_token.get('name'))
+                                if not user:
+                                    print(f"Failed to create or retrieve user for Firebase UID {firebase_uid} and email {email}")
+                                    return Response({'error': 'Failed to create or retrieve user from Firebase token'}, status=status.HTTP_401_UNAUTHORIZED)
+
+                except Exception as e:
+                    print(f"Firebase authentication error: {str(e)}")
+                    # Continue to try Django token authentication
+        
+        # If Firebase authentication failed or not available, try Django token authentication
+        if not user:
+            if not token:
+                return Response({
+                    'error': 'Authentication credentials were not provided.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            try:
+                token_obj = Token.objects.get(key=token)
+                user = token_obj.user
+            except Token.DoesNotExist:
+                return Response({
+                    'error': 'Invalid authentication token'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # If we reach here, the user is authenticated
+        try:
+            profile = user.profile
+        except UserProfile.DoesNotExist:
+            profile = UserProfile.objects.create(user=user, role='customer')
+        
+        # Update user fields
+        if 'first_name' in request.data:
+            user.first_name = request.data['first_name']
+        if 'last_name' in request.data:
+            user.last_name = request.data['last_name']
+        
+        user.save()
+        
+        # Update profile fields
+        if 'phone' in request.data:
+            profile.phone = request.data['phone']
+        if 'nid' in request.data:
+            profile.nid = request.data['nid']
+        if 'address' in request.data:
+            profile.address = request.data['address']
+        if 'service_area_division' in request.data:
+            # Handle division ID or name
+            division_id = request.data['service_area_division']
+            if division_id:
+                try:
+                    division = Division.objects.get(id=division_id)
+                    profile.service_area_division = division.name
+                except Division.DoesNotExist:
+                    profile.service_area_division = division_id
+        
+        if 'service_area_district' in request.data:
+            # Handle district ID or name
+            district_id = request.data['service_area_district']
+            if district_id:
+                try:
+                    district = District.objects.get(id=district_id)
+                    profile.service_area_district = district.name
+                except District.DoesNotExist:
+                    profile.service_area_district = district_id
+        
+        if 'service_area_thana' in request.data:
+            # Handle thana ID or name
+            thana_id = request.data['service_area_thana']
+            if thana_id:
+                try:
+                    thana = Thana.objects.get(id=thana_id)
+                    profile.service_area_thana = thana.name
+                except Thana.DoesNotExist:
+                    profile.service_area_thana = thana_id
+        
+        # Handle profile picture upload
+        if 'profile_picture' in request.FILES:
+            profile_picture = request.FILES['profile_picture']
+            profile.profile_picture = profile_picture
+        
+        profile.save()
+        
+        # Generate QR code if it doesn't exist
+        if not profile.qr_code:
+            try:
+                profile.generate_qr_code()
+                profile.save()
+            except Exception as e:
+                print(f"QR code generation failed: {str(e)}")
+        
+        # Return updated profile information
+        return Response({
+            'message': 'Profile updated successfully',
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
+                'profile': {
+                    'phone': profile.phone,
+                    'nid': profile.nid,
+                    'address': profile.address,
+                    'service_area_division': profile.service_area_division,
+                    'service_area_district': profile.service_area_district,
+                    'service_area_thana': profile.service_area_thana,
+                    'role': profile.role,
+                    'profile_picture': profile.profile_picture.url if profile.profile_picture else None,
+                    'qr_code': profile.qr_code,
+                    'support_link': profile.support_link,
+                }
+            }
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # We'll handle authentication manually
+def change_pin(request):
+    """Change user PIN"""
+    try:
+        # Check for Firebase token in Authorization header
+        auth_header = request.META.get('HTTP_AUTHORIZATION', '')
+        user = None
+        token = None
+
+        # If no Bearer token is provided, allow session-authenticated users to be used
+        if not auth_header.startswith('Bearer '):
+            if request.user and request.user.is_authenticated:
+                user = request.user
+                print(f"change_pin: using session-authenticated user: {user.username}")
+            else:
+                return Response({
+                    'error': 'Authentication credentials were not provided.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        else:
+            token = auth_header[7:]  # Remove 'Bearer ' prefix
+
+            # If Firebase is not available, prefer session-based auth if present; otherwise 503
+            from .firebase_config import is_firebase_available, verify_firebase_token
+            if not is_firebase_available():
+                if request.user and request.user.is_authenticated:
+                    # Ignore the Bearer token and use the session-authenticated user
+                    user = request.user
+                else:
+                    return Response({
+                        'error': 'Firebase authentication is not available on the server.',
+                        'message': 'Firebase is not configured or credentials are invalid.'
+                    }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            else:
+                # Try to authenticate with Firebase token
+                try:
+                    decoded_token = verify_firebase_token(token)
+                    print(f"change_pin: decoded_token present: {bool(decoded_token)}")
+                    if decoded_token:
+                        firebase_uid = decoded_token.get('uid')
+                        email = decoded_token.get('email')
+                        print(f"change_pin: decoded token keys: {list(decoded_token.keys())}")
+
+                        # Try to find user by firebase_uid first
+                        user = None
+                        try:
+                            if firebase_uid:
+                                profile_obj = UserProfile.objects.filter(firebase_uid=firebase_uid).first()
+                                if profile_obj:
+                                    user = profile_obj.user
+                        except Exception as e:
+                            print(f"Error looking up UserProfile by firebase_uid: {e}")
+
+                        # If not found by uid, try email
+                        if not user:
+                            try:
+                                if email:
+                                    user = User.objects.get(email=email)
+                                    print(f"User found by email: {user.username}")
+                                else:
+                                    user = None
+                            except User.DoesNotExist:
+                                from .firebase_auth import get_or_create_user
+                                user = get_or_create_user(firebase_uid, email, decoded_token.get('name'))
+                                if not user:
+                                    print(f"Failed to create or retrieve user for Firebase UID {firebase_uid} and email {email}")
+                                    return Response({'error': 'Failed to create or retrieve user from Firebase token'}, status=status.HTTP_401_UNAUTHORIZED)
+
+                except Exception as e:
+                    print(f"Firebase authentication error: {str(e)}")
+                    # Continue to try Django token authentication
+        
+        # If Firebase authentication failed or not available, try Django token authentication
+        if not user:
+            if not token:
+                return Response({
+                    'error': 'Authentication credentials were not provided.'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            try:
+                token_obj = Token.objects.get(key=token)
+                user = token_obj.user
+            except Token.DoesNotExist:
+                return Response({
+                    'error': 'Invalid authentication token'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+        
+        # If we reach here, the user is authenticated
+        try:
+            profile = user.profile
+        except UserProfile.DoesNotExist:
+            return Response({
+                'error': 'User profile not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        old_pin = request.data.get('old_pin', '')
+        new_pin = request.data.get('new_pin', '')
+        confirm_new_pin = request.data.get('confirm_new_pin', '')
+        
+        # Validate input
+        if not old_pin or not new_pin or not confirm_new_pin:
+            return Response({
+                'error': 'Old PIN, new PIN, and confirm PIN are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if old PIN matches
+        if profile.pin != old_pin:
+            return Response({
+                'error': 'Current PIN is incorrect'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check if new PINs match
+        if new_pin != confirm_new_pin:
+            return Response({
+                'error': 'New PINs do not match'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Update PIN
+        profile.pin = new_pin
+        profile.save()
+        
+        return Response({
+            'message': 'PIN changed successfully'
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return Response({
+            'error': f'An error occurred: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+

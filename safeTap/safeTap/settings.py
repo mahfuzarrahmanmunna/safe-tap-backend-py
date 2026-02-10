@@ -317,7 +317,7 @@ if DEBUG:
     CORS_ALLOW_ALL_METHODS = True
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # This should be first
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

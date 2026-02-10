@@ -72,3 +72,4 @@ def get_initialization_error():
 
 # Initialize Firebase when the module is imported
 initialize_firebase()
+

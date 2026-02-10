@@ -22,6 +22,7 @@ from .views import (
     ThanaViewSet,
     ProductFeatureViewSet,
     WhyChoosePointViewSet,
+    change_pin,
     firebase_status,
     get_referral_info,
     post_list,
@@ -30,6 +31,7 @@ from .views import (
     register_user,
     save_referral_code,
     send_verification_email,
+    update_profile,
     validate_referral_code,
     verify_email,
     get_current_user,
@@ -176,4 +178,12 @@ urlpatterns = [
      
     path('upload-image/', upload_image, name='upload_image'),
     
+    
+    # Add these to your urls.py file in the urlpatterns list
+
+# Profile management endpoints
+path('auth/update-profile/', update_profile, name='update_profile'),
+path('auth/change-pin/', change_pin, name='change_pin'),
+    
 ]
+
